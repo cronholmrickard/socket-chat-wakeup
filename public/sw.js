@@ -1,11 +1,12 @@
 self.addEventListener('push', function (event) {
   const data = event.data.json();
+
   const options = {
     body: data.body,
-    icon: 'icon.png', // Path to an icon image
-    badge: 'badge.png', // Path to a badge image
+    icon: 'icon.png', // Replace with your app icon
+    badge: 'badge.png', // Replace with your badge icon
     data: {
-      url: data.url, // URL to navigate to when notification is clicked
+      url: data.url, // The URL you want to focus or open
     },
   };
 
@@ -13,21 +14,24 @@ self.addEventListener('push', function (event) {
 });
 
 self.addEventListener('notificationclick', function (event) {
-  event.notification.close();
+  event.notification.close(); // Close the notification
 
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
-      for (let i = 0; i < clientList.length; i++) {
-        const client = clientList[i];
-        // If the chat app is open, focus it
-        if (client.url === event.notification.data.url && 'focus' in client) {
-          return client.focus();
+    clients
+      .matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      .then(function (clientList) {
+        for (let i = 0; i < clientList.length; i++) {
+          const client = clientList[i];
+          if (client.url === event.notification.data.url && 'focus' in client) {
+            return client.focus(); // Focus the existing tab
+          }
         }
-      }
-      // Otherwise, open a new tab to the chat app
-      if (clients.openWindow) {
-        return clients.openWindow(event.notification.data.url);
-      }
-    }),
+        if (clients.openWindow) {
+          return clients.openWindow(event.notification.data.url); // Open a new tab if no existing tab found
+        }
+      }),
   );
 });

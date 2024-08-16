@@ -4,7 +4,6 @@ const { Server } = require('socket.io');
 const webpush = require('web-push');
 const path = require('path');
 const moment = require('moment');
-const { log } = require('console');
 require('dotenv').config();
 
 const app = express();
@@ -36,6 +35,9 @@ io.on('connection', (socket) => {
 
   // Handle the 'join' event
   socket.on('join', (username) => {
+    logMessage('INFO', `${username} joined the chat`);
+
+    // Save the username on the socket object
     socket.username = username;
 
     // Check if user already exists
@@ -48,7 +50,6 @@ io.on('connection', (socket) => {
       // Notify others that a new user joined
       const time = moment().format('YYYY-MM-DD HH:mm:ss');
       io.emit('userJoined', { username, time });
-      logMessage('INFO', `${username} joined the chat`);
     } else {
       // Update the user's socket ID and status
       user.socketId = socket.id;
@@ -56,37 +57,26 @@ io.on('connection', (socket) => {
       const time = moment().format('YYYY-MM-DD HH:mm:ss');
       // Notify others that the user rejoined
       io.emit('userRejoined', { username, time });
-      logMessage('INFO', `${username} rejoined the chat`);
     }
 
     // Notify the user of the current user list
     socket.emit('userList', connectedUsers);
-
-    // Broadcast to others that a user has joined
-    socket.broadcast.emit('userJoined', {
-      username,
-      time: new Date().toISOString(),
-    });
   });
 
   // Handle the 'subscribe' event for push notifications
   socket.on('subscribe', (data) => {
+    logMessage('INFO', `Subscribe event received from ${data.username}`);
+
     // Find the user and add their subscription
     let user = connectedUsers.find((u) => u.name === data.username);
     if (user) {
       user.subscription = data.subscription;
-      const time = moment().format('YYYY-MM-DD HH:mm:ss');
-      user.status = 'offline'; // Update status to offline
-      logMessage('INFO', `${socket.username} disconnected`);
-
-      // Notify all clients that a user has disconnected
-      io.emit('userDisconnected', { username: socket.username, time });
     }
   });
 
   // Handle private messages
   socket.on('privateMessage', ({ time, receiver, message }) => {
-    const sender = socket.username;
+    const sender = socket.username; // Retrieve the username from the socket object
     const receiverUser = connectedUsers.find((u) => u.name === receiver);
 
     if (receiverUser && receiverUser.socketId) {
@@ -107,6 +97,8 @@ io.on('connection', (socket) => {
 
   // Handle disconnection
   socket.on('disconnect', () => {
+    logMessage('INFO', `Socket disconnected with id: ${socket.id}`);
+
     const user = connectedUsers.find((u) => u.socketId === socket.id);
     if (user) {
       user.status = 'offline';
@@ -117,6 +109,34 @@ io.on('connection', (socket) => {
         username: user.name,
         time: new Date().toISOString(),
       });
+    }
+  });
+
+  // Handle 'pokeUser' event to send a push notification
+  socket.on('pokeUser', ({ username, url }) => {
+    const user = connectedUsers.find((u) => u.name === username);
+    console.log(`poking ${url}`);
+    if (user && user.status === 'offline' && user.subscription) {
+      const payload = JSON.stringify({
+        title: 'Come back to the chat!',
+        body: `${socket.username} wants you to return.`,
+        url,
+      });
+
+      webpush
+        .sendNotification(user.subscription, payload)
+        .then(() => logMessage('INFO', `Push notification sent to ${username}`))
+        .catch((error) =>
+          logMessage(
+            'ERROR',
+            `Error sending push notification to ${username}: ${error}`,
+          ),
+        );
+    } else {
+      logMessage(
+        'INFO',
+        `User ${username} is either online or has no subscription.`,
+      );
     }
   });
 });

@@ -22,7 +22,8 @@
       .status-offline {
         background-color: red;
       }
-      .message-icon {
+      .message-icon,
+      .poke-icon {
         cursor: pointer;
         margin-left: 10px;
         font-size: 16px;
@@ -271,9 +272,15 @@
         messageIcon.innerHTML = '&#9993;'; // Envelope icon
         messageIcon.addEventListener('click', () => openMessageModal(username));
 
+        const pokeIcon = document.createElement('span');
+        pokeIcon.className = 'poke-icon';
+        pokeIcon.innerHTML = '&#x1F4A8;'; // Poke icon (💨)
+        pokeIcon.addEventListener('click', () => sendPoke(username));
+
         li.appendChild(bullet);
         li.appendChild(document.createTextNode(username));
         li.appendChild(messageIcon);
+        li.appendChild(pokeIcon);
         userList.appendChild(li);
       }
 
@@ -293,6 +300,11 @@
       function openMessageModal(username) {
         receiverNameSpan.textContent = username;
         messageModal.style.display = 'block';
+      }
+
+      function sendPoke(username) {
+        socket.emit('pokeUser', { username, url: window.location.href });
+        console.log(`Sent poke to ${username}`);
       }
 
       sendMessageBtn.addEventListener('click', () => {
