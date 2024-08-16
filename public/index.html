@@ -36,7 +36,6 @@
         width: 100%;
         height: 100%;
         overflow: auto;
-        background-color: rgb(0, 0, 0);
         background-color: rgba(0, 0, 0, 0.4);
       }
       #messageModalContent {
@@ -55,6 +54,8 @@
         margin-left: 20px;
       }
     </style>
+    <!-- Include the Socket.IO client library -->
+    <script src="/socket.io/socket.io.js"></script>
   </head>
   <body>
     <h1>Welcome to the Chat App</h1>
@@ -87,10 +88,8 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script>
       let socket;
-      let currentReceiver = '';
       let username = '';
 
       const loginDiv = document.getElementById('login');
@@ -110,20 +109,54 @@
           initializeSocket();
           loginDiv.style.display = 'none';
           chatDiv.style.display = 'block';
+
+          // Register service worker and request notification permission
+          if ('serviceWorker' in navigator && 'PushManager' in window) {
+            navigator.serviceWorker
+              .register('/sw.js')
+              .then(function (registration) {
+                console.log(
+                  'Service Worker registered with scope:',
+                  registration.scope,
+                );
+                requestNotificationPermission(registration);
+              })
+              .catch(function (error) {
+                console.error('Service Worker registration failed:', error);
+              });
+          } else {
+            console.warn('Push messaging is not supported');
+          }
         }
       });
 
       function initializeSocket() {
-        socket = io({
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
+        console.log('Initializing socket connection...');
+
+        // Initialize the Socket.IO connection
+        socket = io();
+
+        console.log('Socket initialized');
+
+        // Emit the 'join' event once the connection is established
+        socket.emit('join', username);
+        console.log('Emitted join event with username:', username);
+
+        // Server response logs
+        socket.on('connect', () => {
+          console.log('Connected to server', username);
+          if (username) {
+            console.log(
+              'Emitting join event again after connection:',
+              username,
+            );
+            socket.emit('join', username);
+            console.log('Join event emitted after connection');
+          }
         });
 
-        socket.emit('join', username);
-
         socket.on('userList', (users) => {
+          console.log('Received userList:', users); // Log received user list
           userList.innerHTML = '';
           users.forEach((user) => {
             addUserToList(user.name, user.status);
@@ -131,29 +164,28 @@
         });
 
         socket.on('userJoined', ({ username, time }) => {
+          console.log(`${username} joined at ${time}`);
           addUserToList(username, 'online');
           displayMessage(time, `${username} joined`);
         });
 
         socket.on('userDisconnected', ({ username, time }) => {
+          console.log(`${username} disconnected at ${time}`);
           updateUserStatus(username, 'offline');
           displayMessage(time, `${username} disconnected`);
         });
 
         socket.on('userRejoined', ({ username, time }) => {
+          console.log(`${username} rejoined at ${time}`);
           updateUserStatus(username, 'online');
           displayMessage(time, `${username} rejoined`);
         });
 
         socket.on('privateMessage', ({ time, sender, receiver, message }) => {
+          console.log(
+            `Received private message at ${time} from ${sender} to ${receiver}: ${message}`,
+          );
           displayMessage(time, `${sender} > ${receiver}: ${message}`);
-        });
-
-        socket.on('connect', () => {
-          console.log('Connected to server');
-          if (username) {
-            socket.emit('join', username);
-          }
         });
 
         socket.on('reconnect', (attemptNumber) => {
@@ -175,6 +207,48 @@
         socket.on('disconnect', () => {
           console.log('Disconnected from server');
         });
+      }
+
+      function requestNotificationPermission(registration) {
+        Notification.requestPermission().then(function (permission) {
+          if (permission === 'granted') {
+            subscribeUserToPush(registration);
+          } else {
+            console.log('Notification permission denied');
+          }
+        });
+      }
+
+      function subscribeUserToPush(registration) {
+        registration.pushManager
+          .subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(
+              'BGlhjDcX6uKPiHrPP-cbSdQe9Fv2ALB3bO0zBNTIE6sRfT3J2b2feOOOV1UeRLJdkM7fI76rkb1cRN6mvg-G1bw',
+            ),
+          })
+          .then(function (subscription) {
+            console.log('User is subscribed:', subscription);
+            // Send subscription to server
+            socket.emit('subscribe', { username, subscription });
+          })
+          .catch(function (error) {
+            console.error('Failed to subscribe the user:', error);
+          });
+      }
+
+      function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding)
+          .replace(/\-/g, '+')
+          .replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+
+        for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
       }
 
       function addUserToList(username, status) {
@@ -217,7 +291,6 @@
       }
 
       function openMessageModal(username) {
-        currentReceiver = username;
         receiverNameSpan.textContent = username;
         messageModal.style.display = 'block';
       }
@@ -228,7 +301,7 @@
           const time = new Date().toISOString().slice(0, 19).replace('T', ' ');
           socket.emit('privateMessage', {
             time,
-            receiver: currentReceiver,
+            receiver: receiverNameSpan.textContent,
             message,
           });
           messageModal.style.display = 'none';
