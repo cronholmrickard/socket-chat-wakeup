@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat App</title>
+    <style>
+      .user-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .status-bullet {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+      .status-online {
+        background-color: green;
+      }
+      .status-offline {
+        background-color: red;
+      }
+      .message-icon {
+        cursor: pointer;
+        margin-left: 10px;
+        font-size: 16px;
+      }
+      #messageModal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgb(0, 0, 0);
+        background-color: rgba(0, 0, 0, 0.4);
+      }
+      #messageModalContent {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 300px;
+      }
+      #messages {
+        width: 50%;
+        height: 300px;
+        overflow-y: scroll;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-left: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Welcome to the Chat App</h1>
+    <div id="login">
+      <input type="text" id="username" placeholder="Enter your name" />
+      <button id="connectBtn">Connect</button>
+    </div>
+    <div id="chat" style="display: none">
+      <div style="display: flex">
+        <div>
+          <h2>Connected Users</h2>
+          <ul id="userList"></ul>
+        </div>
+        <div id="messages"></div>
+      </div>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="messageModal">
+      <div id="messageModalContent">
+        <h3>Send Message to <span id="receiverName"></span></h3>
+        <textarea
+          id="messageText"
+          rows="4"
+          cols="30"
+          placeholder="Type your message"
+        ></textarea
+        ><br /><br />
+        <button id="sendMessageBtn">Send</button>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      let socket;
+      let currentReceiver = '';
+
+      const loginDiv = document.getElementById('login');
+      const chatDiv = document.getElementById('chat');
+      const connectBtn = document.getElementById('connectBtn');
+      const usernameInput = document.getElementById('username');
+      const userList = document.getElementById('userList');
+      const messagesDiv = document.getElementById('messages');
+      const messageModal = document.getElementById('messageModal');
+      const messageText = document.getElementById('messageText');
+      const sendMessageBtn = document.getElementById('sendMessageBtn');
+      const receiverNameSpan = document.getElementById('receiverName');
+
+      connectBtn.addEventListener('click', () => {
+        const username = usernameInput.value;
+        if (username) {
+          // Initialize and connect the socket only after the user clicks "Connect"
+          socket = io();
+
+          socket.emit('join', username);
+          loginDiv.style.display = 'none';
+          chatDiv.style.display = 'block';
+
+          socket.on('userList', (users) => {
+            userList.innerHTML = '';
+            users.forEach((user) => {
+              addUserToList(user.name, user.status);
+            });
+          });
+
+          socket.on('userJoined', (username) => {
+            addUserToList(username, 'online');
+          });
+
+          socket.on('userDisconnected', (username) => {
+            updateUserStatus(username, 'offline');
+          });
+
+          socket.on('privateMessage', ({ time, sender, receiver, message }) => {
+            displayMessage(time, sender, receiver, message);
+          });
+        }
+      });
+
+      function addUserToList(username, status) {
+        const li = document.createElement('li');
+        li.className = 'user-item';
+        li.id = `user-${username}`;
+
+        const bullet = document.createElement('div');
+        bullet.className = `status-bullet ${
+          status === 'online' ? 'status-online' : 'status-offline'
+        }`;
+
+        const messageIcon = document.createElement('span');
+        messageIcon.className = 'message-icon';
+        messageIcon.innerHTML = '&#9993;'; // Envelope icon
+        messageIcon.addEventListener('click', () => openMessageModal(username));
+
+        li.appendChild(bullet);
+        li.appendChild(document.createTextNode(username));
+        li.appendChild(messageIcon);
+        userList.appendChild(li);
+      }
+
+      function updateUserStatus(username, status) {
+        const userItem = document.getElementById(`user-${username}`);
+        if (userItem) {
+          const bullet = userItem.querySelector('.status-bullet');
+          bullet.className = `status-bullet ${
+            status === 'online' ? 'status-online' : 'status-offline'
+          }`;
+        }
+      }
+
+      function openMessageModal(username) {
+        currentReceiver = username;
+        receiverNameSpan.textContent = username;
+        messageModal.style.display = 'block';
+      }
+
+      sendMessageBtn.addEventListener('click', () => {
+        const message = messageText.value;
+        if (message) {
+          const time = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          socket.emit('privateMessage', {
+            time,
+            receiver: currentReceiver,
+            message,
+          });
+          messageModal.style.display = 'none';
+          messageText.value = '';
+        }
+      });
+
+      function displayMessage(time, sender, receiver, message) {
+        const messageElement = document.createElement('div');
+        messageElement.textContent = `${time} ${sender} > ${receiver}: ${message}`;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      window.onclick = function (event) {
+        if (event.target === messageModal) {
+          messageModal.style.display = 'none';
+        }
+      };
+    </script>
+  </body>
+</html>
