@@ -115,7 +115,6 @@ io.on('connection', (socket) => {
   // Handle 'pokeUser' event to send a push notification
   socket.on('pokeUser', ({ username, url }) => {
     const user = connectedUsers.find((u) => u.name === username);
-    console.log(`poking ${url}`);
     if (user && user.status === 'offline' && user.subscription) {
       const payload = JSON.stringify({
         title: 'Come back to the chat!',
