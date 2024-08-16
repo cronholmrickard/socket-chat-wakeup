@@ -91,6 +91,7 @@
     <script>
       let socket;
       let currentReceiver = '';
+      let username = '';
 
       const loginDiv = document.getElementById('login');
       const chatDiv = document.getElementById('chat');
@@ -104,37 +105,84 @@
       const receiverNameSpan = document.getElementById('receiverName');
 
       connectBtn.addEventListener('click', () => {
-        const username = usernameInput.value;
+        username = usernameInput.value;
         if (username) {
-          // Initialize and connect the socket only after the user clicks "Connect"
-          socket = io();
-
-          socket.emit('join', username);
+          initializeSocket();
           loginDiv.style.display = 'none';
           chatDiv.style.display = 'block';
-
-          socket.on('userList', (users) => {
-            userList.innerHTML = '';
-            users.forEach((user) => {
-              addUserToList(user.name, user.status);
-            });
-          });
-
-          socket.on('userJoined', (username) => {
-            addUserToList(username, 'online');
-          });
-
-          socket.on('userDisconnected', (username) => {
-            updateUserStatus(username, 'offline');
-          });
-
-          socket.on('privateMessage', ({ time, sender, receiver, message }) => {
-            displayMessage(time, sender, receiver, message);
-          });
         }
       });
 
+      function initializeSocket() {
+        socket = io({
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+        });
+
+        socket.emit('join', username);
+
+        socket.on('userList', (users) => {
+          userList.innerHTML = '';
+          users.forEach((user) => {
+            addUserToList(user.name, user.status);
+          });
+        });
+
+        socket.on('userJoined', ({ username, time }) => {
+          addUserToList(username, 'online');
+          displayMessage(time, `${username} joined`);
+        });
+
+        socket.on('userDisconnected', ({ username, time }) => {
+          updateUserStatus(username, 'offline');
+          displayMessage(time, `${username} disconnected`);
+        });
+
+        socket.on('userRejoined', ({ username, time }) => {
+          updateUserStatus(username, 'online');
+          displayMessage(time, `${username} rejoined`);
+        });
+
+        socket.on('privateMessage', ({ time, sender, receiver, message }) => {
+          displayMessage(time, `${sender} > ${receiver}: ${message}`);
+        });
+
+        socket.on('connect', () => {
+          console.log('Connected to server');
+          if (username) {
+            socket.emit('join', username);
+          }
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+          console.log(`Reconnected after ${attemptNumber} attempts`);
+        });
+
+        socket.on('reconnecting', (attemptNumber) => {
+          console.log(`Attempting to reconnect... (${attemptNumber})`);
+        });
+
+        socket.on('reconnect_error', (error) => {
+          console.log('Reconnection error:', error);
+        });
+
+        socket.on('reconnect_failed', () => {
+          console.log('Reconnection failed');
+        });
+
+        socket.on('disconnect', () => {
+          console.log('Disconnected from server');
+        });
+      }
+
       function addUserToList(username, status) {
+        const existingUser = document.getElementById(`user-${username}`);
+        if (existingUser) {
+          existingUser.remove(); // Remove existing entry if it exists
+        }
+
         const li = document.createElement('li');
         li.className = 'user-item';
         li.id = `user-${username}`;
@@ -162,6 +210,9 @@
           bullet.className = `status-bullet ${
             status === 'online' ? 'status-online' : 'status-offline'
           }`;
+        } else {
+          // If the user does not exist, add them (this shouldn't normally happen)
+          addUserToList(username, status);
         }
       }
 
@@ -185,9 +236,9 @@
         }
       });
 
-      function displayMessage(time, sender, receiver, message) {
+      function displayMessage(time, message) {
         const messageElement = document.createElement('div');
-        messageElement.textContent = `${time} ${sender} > ${receiver}: ${message}`;
+        messageElement.textContent = `${time} ${message}`;
         messagesDiv.appendChild(messageElement);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
