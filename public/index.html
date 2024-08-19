@@ -54,6 +54,10 @@
         padding: 10px;
         margin-left: 20px;
       }
+      #notificationStatus {
+        color: red;
+        margin-top: 20px;
+      }
     </style>
     <!-- Include the Socket.IO client library -->
     <script src="/socket.io/socket.io.js"></script>
@@ -62,7 +66,8 @@
     <h1>Welcome to the Chat App</h1>
     <div id="login">
       <input type="text" id="username" placeholder="Enter your name" />
-      <button id="connectBtn">Connect</button>
+      <button id="connectBtn" disabled>Connect</button>
+      <div id="notificationStatus"></div>
     </div>
     <div id="chat" style="display: none">
       <div style="display: flex">
@@ -103,9 +108,68 @@
       const messageText = document.getElementById('messageText');
       const sendMessageBtn = document.getElementById('sendMessageBtn');
       const receiverNameSpan = document.getElementById('receiverName');
+      const notificationStatus = document.getElementById('notificationStatus');
+
+      // Disable connect button initially
+      connectBtn.disabled = true;
+
+      // Check notification support and status on page load
+      window.onload = () => {
+        checkNotificationSupportAndStatus();
+      };
+
+      // Listen for changes in the username input
+      usernameInput.addEventListener('input', () => {
+        validateForm();
+      });
+
+      function checkNotificationSupportAndStatus() {
+        if (!('Notification' in window)) {
+          // Browser does not support notifications
+          notificationStatus.textContent =
+            'Your browser does not support notifications and you can therefore not join the chat.';
+          return;
+        }
+
+        if (Notification.permission === 'granted') {
+          updateNotificationStatus('granted');
+        } else if (Notification.permission === 'denied') {
+          updateNotificationStatus('denied');
+        } else {
+          // Request permission if the status is default (not granted or denied)
+          requestNotificationPermission();
+        }
+      }
+
+      function updateNotificationStatus(permission) {
+        if (permission === 'granted') {
+          notificationStatus.textContent = '';
+          validateForm(); // Validate form when notifications are granted
+        } else if (permission === 'denied') {
+          notificationStatus.textContent =
+            'You have disallowed notifications, you need to allow them to join the chat.';
+          connectBtn.disabled = true;
+        } else {
+          notificationStatus.textContent =
+            'You need to allow notifications to join the chat.';
+          connectBtn.disabled = true;
+        }
+      }
+
+      function validateForm() {
+        const isNameValid = usernameInput.value.trim() !== '';
+        const isNotificationGranted = Notification.permission === 'granted';
+        connectBtn.disabled = !(isNameValid && isNotificationGranted);
+      }
+
+      function requestNotificationPermission() {
+        Notification.requestPermission().then(function (permission) {
+          updateNotificationStatus(permission);
+        });
+      }
 
       connectBtn.addEventListener('click', () => {
-        username = usernameInput.value;
+        username = usernameInput.value.trim();
         if (username) {
           initializeSocket();
           loginDiv.style.display = 'none';
@@ -214,9 +278,8 @@
         Notification.requestPermission().then(function (permission) {
           if (permission === 'granted') {
             subscribeUserToPush(registration);
-          } else {
-            console.log('Notification permission denied');
           }
+          updateNotificationStatus(permission);
         });
       }
 
