@@ -270,11 +270,21 @@
         const messageIcon = document.createElement('span');
         messageIcon.className = 'message-icon';
         messageIcon.innerHTML = '&#9993;'; // Envelope icon
+        if (status === 'online') {
+          messageIcon.style.display = 'inline';
+        } else {
+          messageIcon.style.display = 'none';
+        }
         messageIcon.addEventListener('click', () => openMessageModal(username));
 
         const pokeIcon = document.createElement('span');
         pokeIcon.className = 'poke-icon';
-        pokeIcon.innerHTML = '&#x1F4A8;'; // Poke icon (💨)
+        pokeIcon.innerHTML = '&#128073;'; // Poke icon (👉)
+        if (status === 'offline') {
+          pokeIcon.style.display = 'inline';
+        } else {
+          pokeIcon.style.display = 'none';
+        }
         pokeIcon.addEventListener('click', () => sendPoke(username));
 
         li.appendChild(bullet);
@@ -291,6 +301,16 @@
           bullet.className = `status-bullet ${
             status === 'online' ? 'status-online' : 'status-offline'
           }`;
+
+          const messageIcon = userItem.querySelector('.message-icon');
+          const pokeIcon = userItem.querySelector('.poke-icon');
+          if (status === 'online') {
+            messageIcon.style.display = 'inline';
+            pokeIcon.style.display = 'none';
+          } else {
+            messageIcon.style.display = 'none';
+            pokeIcon.style.display = 'inline';
+          }
         } else {
           // If the user does not exist, add them (this shouldn't normally happen)
           addUserToList(username, status);
